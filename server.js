@@ -1,0 +1,344 @@
+const express = require('express');
+const cors = require('cors');
+const { MongoClient, ServerApiVersion } = require('mongodb');
+require('dotenv').config();
+
+const dns = require('dns');
+// Use public DNS to avoid ECONNREFUSED on local ISP/routers when resolving MongoDB SRV records
+dns.setServers(['8.8.8.8', '8.8.4.4']);
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+const MONGODB_URI = process.env.MONGODB_URI;
+const DB_NAME = process.env.DB_NAME || 'smart_subsidence';
+
+const path = require('path');
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+// MongoDB Client
+let db;
+let client;
+
+async function connectToDatabase() {
+  if (!MONGODB_URI || MONGODB_URI.includes('<') || MONGODB_URI.includes('>')) {
+    console.warn('⚠️  MongoDB URI contains placeholder values (<db_username> / <db_password>) in .env. Please replace them with your actual Atlas database user credentials.');
+    return null;
+  }
+
+  try {
+    client = new MongoClient(MONGODB_URI, {
+      serverApi: {
+        version: ServerApiVersion.v1,
+        strict: true,
+        deprecationErrors: true,
+      }
+    });
+
+    await client.connect();
+    await client.db("admin").command({ ping: 1 });
+    console.log('✅ Successfully connected to MongoDB Atlas!');
+    db = client.db(DB_NAME);
+    return db;
+  } catch (error) {
+    console.error('❌ Failed to connect to MongoDB:', error.message);
+  }
+}
+
+// Routes
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    dbConnected: Boolean(db),
+    uptime: process.uptime(),
+  });
+});
+
+// Helper function to calculate alert status based on user thresholds
+function calculateStatus(tensionValue) {
+  const val = Number(tensionValue) || 0;
+  if (val > 150) {
+    return 'CRITICAL';
+  } else if (val >= 75) {
+    return 'MODERATE';
+  }
+  return 'NORMAL';
+}
+
+// POST /api/readings - Ingest data from ESP32 / IoT nodes
+app.post('/api/readings', async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(503).json({
+        success: false,
+        error: 'Database not connected yet.',
+      });
+    }
+
+    const payload = req.body || {};
+    
+    // Support common sensor naming aliases for tension/displacement
+    const tensionVal = Number(
+      payload.tension ?? 
+      payload.displacement ?? 
+      payload.subsidence ?? 
+      payload.distance ?? 
+      payload.depth ?? 
+      payload.value ?? 
+      0
+    );
+
+    // Determine alert status based on user rules:
+    // 0 - 75: NORMAL
+    // 75 - 150: MODERATE (Yellow)
+    // 150+: CRITICAL (Red)
+    const alertStatus = calculateStatus(tensionVal);
+
+    // Dynamic document: preserves ALL incoming sensor keys while adding metadata
+    const readingDocument = {
+      nodeId: String(payload.nodeId || payload.sensorId || 'NODE_C'),
+      sensorId: String(payload.sensorId || payload.nodeId || 'NODE_C'),
+      tension: tensionVal,
+      displacement: tensionVal,
+      ...payload,
+      alertStatus,
+      receivedAt: new Date(),
+    };
+
+    const collection = db.collection('readings');
+    const result = await collection.insertOne(readingDocument);
+
+    console.log(`📥 [${readingDocument.receivedAt.toLocaleTimeString()}] Reading Saved (${readingDocument.nodeId}): Tension=${tensionVal} N [${alertStatus}]`);
+
+    return res.status(201).json({
+      success: true,
+      message: 'Reading recorded successfully',
+      insertedId: result.insertedId,
+      alertStatus,
+    });
+  } catch (error) {
+    console.error('Error saving reading:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/readings - Fetch historical readings
+app.get('/api/readings', async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(503).json({ error: 'Database not connected.' });
+    }
+    const limit = parseInt(req.query.limit) || 60;
+    const nodeId = req.query.nodeId || req.query.sensorId;
+    const query = nodeId ? { $or: [{ nodeId }, { sensorId: nodeId }] } : {};
+
+    const collection = db.collection('readings');
+    const readings = await collection
+      .find(query)
+      .sort({ receivedAt: -1 })
+      .limit(limit)
+      .toArray();
+
+    res.json({ success: true, count: readings.length, readings });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/alerts - Fetch all moderate and critical hazard events from MongoDB
+app.get('/api/alerts', async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(503).json({ error: 'Database not connected.' });
+    }
+    const collection = db.collection('readings');
+    const alerts = await collection
+      .find({
+        $or: [
+          { alertStatus: { $in: ['MODERATE', 'CRITICAL'] } },
+          { vibration: true },
+          { tension: { $gte: 75 } }
+        ]
+      })
+      .sort({ receivedAt: -1 })
+      .limit(100)
+      .toArray();
+
+    res.json({ success: true, count: alerts.length, alerts });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/nodes - Fetch all registered nodes and their placement simulation metadata
+app.get('/api/nodes', async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(503).json({ error: 'Database not connected.' });
+    }
+
+    const defaultNodes = [
+      {
+        nodeId: 'NODE_A',
+        name: 'Surface Crown Anchor',
+        location: 'Surface Overburden - Sector 01',
+        depth: '0 m (Surface Level)',
+        coordinates: { x: 18, y: 15 },
+        sensorType: 'Surface GPS & Extensometer',
+        status: 'NORMAL',
+        battery: 98,
+        signalDbm: -54,
+        installDate: '2026-03-12'
+      },
+      {
+        nodeId: 'NODE_B',
+        name: 'Mid-Strata Pillar Anchor',
+        location: 'Shaft 2 Upper Gallery - Sector 02',
+        depth: '-45 m Sub-surface',
+        coordinates: { x: 45, y: 48 },
+        sensorType: 'Pillar Load Cell & Pore Pressure',
+        status: 'NORMAL',
+        battery: 91,
+        signalDbm: -62,
+        installDate: '2026-04-05'
+      },
+      {
+        nodeId: 'NODE_C',
+        name: 'Active Gallery Roof Crown',
+        location: 'Mine Gallery 4B - Active Face',
+        depth: '-120 m Deep Gallery',
+        coordinates: { x: 78, y: 82 },
+        sensorType: 'Roof Bolt Tension (HX711) + Tilt (MPU6050)',
+        status: 'ACTIVE',
+        battery: 94,
+        signalDbm: -64,
+        installDate: '2026-06-18'
+      }
+    ];
+
+    const collection = db.collection('readings');
+    const latestC = await collection.find({}).sort({ receivedAt: -1 }).limit(1).toArray();
+
+    if (latestC.length > 0) {
+      defaultNodes[2].latestReading = latestC[0];
+      defaultNodes[2].status = latestC[0].alertStatus || 'NORMAL';
+    }
+
+    res.json({ success: true, nodes: defaultNodes });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/stats - Aggregated stats for the dashboard
+app.get('/api/stats', async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(503).json({ error: 'Database not connected.' });
+    }
+    const collection = db.collection('readings');
+    const totalCount = await collection.countDocuments();
+    
+    // Get last reading
+    const lastReading = await collection.find({}).sort({ receivedAt: -1 }).limit(1).toArray();
+    
+    // Get count of moderate and critical alerts in the last 24h
+    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const criticalCount = await collection.countDocuments({
+      receivedAt: { $gte: dayAgo },
+      alertStatus: 'CRITICAL'
+    });
+    const moderateCount = await collection.countDocuments({
+      receivedAt: { $gte: dayAgo },
+      alertStatus: 'MODERATE'
+    });
+
+    res.json({
+      success: true,
+      totalReadings: totalCount,
+      criticalAlerts24h: criticalCount,
+      moderateAlerts24h: moderateCount,
+      latest: lastReading[0] || null,
+      serverTime: new Date().toISOString(),
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/simulate - Trigger a test reading for instant UI demonstration
+app.post('/api/simulate', async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(503).json({ error: 'Database not connected.' });
+    }
+    const scenario = req.body.scenario || 'random'; // 'normal', 'moderate', 'critical', 'random'
+    let tension = 35.0;
+
+    if (scenario === 'normal') {
+      tension = parseFloat((Math.random() * 65 + 5).toFixed(2)); // 5 - 70 N
+    } else if (scenario === 'moderate') {
+      tension = parseFloat((Math.random() * 60 + 80).toFixed(2)); // 80 - 140 N
+    } else if (scenario === 'critical') {
+      tension = parseFloat((Math.random() * 150 + 160).toFixed(2)); // 160 - 310 N
+    } else {
+      // 70% normal, 20% moderate, 10% critical
+      const r = Math.random();
+      if (r < 0.7) tension = parseFloat((Math.random() * 65 + 5).toFixed(2));
+      else if (r < 0.9) tension = parseFloat((Math.random() * 60 + 80).toFixed(2));
+      else tension = parseFloat((Math.random() * 150 + 160).toFixed(2));
+    }
+
+    const alertStatus = calculateStatus(tension);
+    const simulatedDoc = {
+      nodeId: 'NODE_C',
+      sensorId: 'NODE_C',
+      tension,
+      displacement: tension,
+      accelX: parseFloat((Math.random() * 2 - 1).toFixed(2)),
+      accelY: parseFloat((Math.random() * 2 - 1).toFixed(2)),
+      accelZ: parseFloat((9.8 + (Math.random() * 0.4 - 0.2)).toFixed(2)),
+      gyroX: parseFloat((Math.random() * 0.1 - 0.05).toFixed(2)),
+      gyroY: parseFloat((Math.random() * 0.1 - 0.05).toFixed(2)),
+      gyroZ: parseFloat((Math.random() * 0.1 - 0.05).toFixed(2)),
+      tiltX: parseFloat((Math.random() * 8 - 4).toFixed(2)),
+      tiltY: parseFloat((Math.random() * 8 - 4).toFixed(2)),
+      vibration: tension > 100 ? (Math.random() > 0.4) : false,
+      soilMoisture: Math.floor(Math.random() * 40 + 40),
+      nodeStatus: alertStatus,
+      alertStatus,
+      isSimulated: true,
+      receivedAt: new Date(),
+    };
+
+    const collection = db.collection('readings');
+    const result = await collection.insertOne(simulatedDoc);
+
+    res.status(201).json({
+      success: true,
+      message: 'Simulation reading generated successfully',
+      insertedId: result.insertedId,
+      data: simulatedDoc,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Start Server
+app.listen(PORT, async () => {
+  console.log(`🌐 Server running on http://localhost:${PORT}`);
+  await connectToDatabase();
+});
+
+// Graceful Shutdown
+process.on('SIGINT', async () => {
+  if (client) {
+    await client.close();
+    console.log('MongoDB connection closed.');
+  }
+  process.exit(0);
+});

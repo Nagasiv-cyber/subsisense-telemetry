@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MinePulse Telemetry OS</title>
+  <meta name="description" content="Mission-Critical Industrial SCADA and Geotechnical Subsidence Telemetry OS">
+  <link rel="stylesheet" href="css/style.css">
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+  <!-- Green Header Banner -->
+  <header class="green-header-bar">
+    <div class="header-inner-container">
+      <div class="brand-title-area">
+        <h1>MinePulse Telemetry OS</h1>
+        <div class="node-meta">
+          <select id="nodeSelector" class="node-switcher-select" onchange="changeActiveNode(this.value)">
+            <option value="NODE_C" selected>NODE_C - Section 04 (-120m)</option>
+            <option value="NODE_B">NODE_B - Section 02 (-45m)</option>
+            <option value="NODE_A">NODE_A - Section 01 (0m)</option>
+          </select>
+          <span>•</span>
+          <span id="headerRssiTag">RSSI: -64dBm • 10 SPS</span>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <span class="siren-toggle-label">Siren Toggle</span>
+        <button id="btnSirenAck" class="btn-ack" onclick="toggleSiren()">ACK</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Clean White / Light Canvas Container -->
+  <div class="app-container">
+
+    <!-- =========================================================================
+         VIEW 1: REAL-TIME DASHBOARD
+         ========================================================================= -->
+    <div id="view-dashboard" class="view-section active">
+
+      <!-- 2x2 Telemetry Grid -->
+      <main class="telemetry-grid-2x2">
+
+        <!-- Card 1: TENSION (HX711) -->
+        <section class="telemetry-card" id="cardTension">
+          <div class="card-label-top">
+            <span>TENSION (HX711)</span>
+          </div>
+          
+          <div id="readoutTension" class="tension-readout">0.0N</div>
+
+          <div class="sparkline-container">
+            <canvas id="canvasSparkline" class="sparkline-canvas"></canvas>
+          </div>
+
+          <div class="astm-threshold-area">
+            <div class="astm-title">ASTM Threshold</div>
+            <div class="astm-gradient-bar">
+              <div id="astmCursor" class="astm-slider-cursor" style="left: 15%;"></div>
+            </div>
+            <div id="astmStatusLabel" class="astm-status-text">Normal: Stable Rock Load</div>
+          </div>
+        </section>
+
+        <!-- Card 2: TILT (MPU6050) -->
+        <section class="telemetry-card">
+          <div class="card-label-top">
+            <span>TILT (MPU6050)</span>
+          </div>
+
+          <div class="tilt-coords-row">
+            <span>Pitch: <strong id="valPitch">+0.0°</strong></span>
+            <span>Roll: <strong id="valRoll">-0.0°</strong></span>
+          </div>
+
+          <div class="vector-grid-container">
+            <canvas id="canvasVectorGrid" class="vector-grid-canvas"></canvas>
+          </div>
+        </section>
+
+        <!-- Card 3: SEISMIC (SW-420) -->
+        <section class="telemetry-card">
+          <div class="card-label-top">
+            <span>SEISMIC (SW-420)</span>
+          </div>
+
+          <div class="seismic-canvas-container">
+            <canvas id="canvasSeismic" class="seismic-canvas"></canvas>
+          </div>
+
+          <div class="seismic-footer">
+            Hz Trigger Count: <span id="valTriggerCount" class="hz-val">0</span>
+          </div>
+        </section>
+
+        <!-- Card 4: SOIL SATURATION -->
+        <section class="telemetry-card">
+          <div class="card-label-top">
+            <span>SOIL SATURATION</span>
+          </div>
+
+          <div id="readoutSoil" class="soil-readout">14.8%</div>
+
+          <div>
+            <span id="badgeSoil" class="soil-badge">Stable</span>
+          </div>
+
+          <div class="moisture-bar-label">Moisture Bar</div>
+          <div class="moisture-progress-bg">
+            <div id="fillMoisture" class="moisture-progress-fill" style="width: 15%;"></div>
+          </div>
+        </section>
+
+      </main>
+
+      <!-- Engineering Oscilloscope -->
+      <section class="oscilloscope-card">
+        <div class="oscilloscope-header">
+          <span class="oscilloscope-title">ENGINEERING OSCILLOSCOPE</span>
+          <div class="oscilloscope-controls">
+            <button class="btn-ctrl" onclick="resetOscilloscopeZoom()">Reset</button>
+            <button class="btn-ctrl" onclick="simulateNextEvent()">Step (Sim)</button>
+          </div>
+        </div>
+
+        <div class="oscilloscope-canvas-wrapper">
+          <canvas id="oscilloscopeChart"></canvas>
+        </div>
+      </section>
+
+      <!-- Kinematics Strip -->
+      <section class="kinematics-card">
+        <div class="kinematics-title">Kinematics Strip</div>
+        <div class="kinematics-strip-row">
+          <div class="kin-item">Ax: <span id="kinAx">+0.02g</span><span class="arrow">↗</span></div>
+          <div class="kin-item">Ay: <span id="kinAy">-0.01g</span><span class="arrow">↘</span></div>
+          <div class="kin-item">Az: <span id="kinAz">+0.98g</span><span class="arrow">↗</span></div>
+          <div class="kin-item">Gx: <span id="kinGx">+0.5°/s</span><span class="arrow">↘</span></div>
+          <div class="kin-item">Gy: <span id="kinGy">-0.2°/s</span><span class="arrow">↘</span></div>
+          <div class="kin-item">Gz: <span id="kinGz">+0.1°/s</span><span class="arrow">→</span></div>
+        </div>
+      </section>
+
+      <!-- Real-Time Packet Stream -->
+      <section class="packet-stream-card">
+        <div class="packet-stream-header">
+          <span class="packet-stream-title">REAL-TIME PACKET STREAM</span>
+          <button class="btn-ctrl" onclick="exportDataLog()">Export Log</button>
+        </div>
+
+        <div id="packetLogContainer" class="packet-log-container">
+          <!-- Live injected packet logs -->
+        </div>
+      </section>
+
+      <!-- Quick Test Bar -->
+      <div class="sim-actions-row">
+        <button class="btn-sim" onclick="quickSim('normal')">Sim: Normal (0-75N)</button>
+        <button class="btn-sim" onclick="quickSim('moderate')">Sim: Moderate (75-150N)</button>
+        <button class="btn-sim" onclick="quickSim('critical')">Sim: Hazard (>150N)</button>
+      </div>
+
+    </div>
+
+    <!-- =========================================================================
+         VIEW 2: NODES (MINEGUARD STRING TENSION RESCUE SIMULATOR)
+         ========================================================================= -->
+    <div id="view-nodes" class="view-section">
+      <section class="nodes-simulator-card">
+        <div class="oscilloscope-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="live-dot-sim"></span>
+            <span class="oscilloscope-title">⛏ MINEGUARD STRING-TENSION RESCUE SIMULATOR</span>
+          </div>
+          <span class="pill-metric" style="color: var(--tactical-green);">8 STRATA NODES ONLINE</span>
+        </div>
+
+        <!-- Simulator Grid: Canvas (Left/Main) + Control Panel (Right) -->
+        <div class="mine-sim-grid">
+          
+          <!-- Mine Canvas Area -->
+          <div class="mine-canvas-area">
+            <canvas id="c_mine"></canvas>
+            
+            <div id="simBanner" class="sim-banner">
+              <div class="bt" id="simBt">SAFE</div>
+              <div class="bs" id="simBs">Normal structural tension</div>
+            </div>
+
+            <div class="drag-hint-box">
+              🖱️ <b>Drag any node</b> to simulate roof/rock displacement<br>
+              <span style="color: #94a3b8; font-size: 0.68rem;">TOP VIEW • Dragging a node away increases cable tension</span>
+            </div>
+
+            <div class="why-box">
+              <b style="color: #ffffff;">WHY THIS MECHANICAL SOLUTION?</b><br>
+              Optical/laser systems can false-trigger from heavy mining dust, humidity, and rock smoke. 
+              MineGuard utilizes <b style="color: #ffffff;">mechanical string tension</b> across structural anchors where airborne dust does not trigger false structural alarms.
+            </div>
+          </div>
+
+          <!-- Simulation Controls & Live Telemetry Sidebar -->
+          <div class="mine-control-sidebar">
+            
+            <!-- Overall Status -->
+            <div class="status-summary-box" id="simStatusBox">
+              <div id="simState" style="font-size: 1.4rem; font-weight: 900; color: #16a34a;">SAFE</div>
+              <div class="desc" id="simDesc" style="font-size: 0.72rem; color: #64748b; margin: 4px 0;">Normal structural tension</div>
+              <div class="progress-bar-bg" style="height: 10px; margin-top: 6px;">
+                <div class="fill" id="simFill" style="height: 100%; width: 12%; background: #16a34a; transition: 0.2s;"></div>
+              </div>
+              <div class="metric" style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.75rem; font-family: 'JetBrains Mono', monospace;">
+                <span style="color: #64748b;">Peak Tension:</span>
+                <b id="simPeak" style="color: var(--text-black);">12%</b>
+              </div>
+            </div>
+
+            <!-- Structural Nodes List -->
+            <div class="sim-panel-section">
+              <h3 style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; color: var(--text-muted);">Structural Nodes Telemetry</h3>
+              <div id="simNodesList" class="sim-nodes-list">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+
+            <!-- Emergency Simulation Triggers -->
+            <div class="sim-panel-section">
+              <h3 style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; color: var(--text-muted);">Emergency Simulations</h3>
+              <button class="btn-ctrl" style="width: 100%; background: #e0f2fe; color: #0284c7; border-color: #7dd3fc; margin-bottom: 4px; font-weight: 700;" onclick="triggerMineSimMove(35, 'Soil loosening detected in Section 02')">Simulate Soil Loosening</button>
+              <button class="btn-ctrl" style="width: 100%; background: #fef3c7; color: #b45309; border-color: #fcd34d; margin-bottom: 4px; font-weight: 700;" onclick="triggerMineSimMove(62, 'Borehole rock displacement detected')">Simulate Rock Shift</button>
+              <button class="btn-ctrl" style="width: 100%; background: #fee2e2; color: #dc2626; border-color: #fca5a5; margin-bottom: 4px; font-weight: 700;" onclick="triggerMineSimMove(92, 'MAJOR STRUCTURAL GALLERY INSTABILITY')">Simulate Major Instability</button>
+              <button class="btn-ctrl" style="width: 100%; margin-top: 4px;" onclick="resetMineSim()">Reset Mine to Baseline</button>
+            </div>
+
+            <!-- Control Room Event Log -->
+            <div class="sim-panel-section">
+              <h3 style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; color: var(--text-muted);">Control Room Event Log</h3>
+              <div id="simEventLog" class="sim-log-box">
+                <!-- Injected event logs -->
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </section>
+    </div>
+
+    <!-- =========================================================================
+         VIEW 3: ANALYTICS (ENTIRE MONGODB DATABASE LOGS)
+         ========================================================================= -->
+    <div id="view-analytics" class="view-section">
+      
+      <!-- Aggregated KPI Stats -->
+      <div class="analytics-stats-grid">
+        <div class="stat-kpi-card">
+          <div class="stat-kpi-label">Total Readings</div>
+          <div id="kpiTotalReadings" class="stat-kpi-val">0</div>
+        </div>
+        <div class="stat-kpi-card">
+          <div class="stat-kpi-label">Peak Tension</div>
+          <div id="kpiPeakTension" class="stat-kpi-val" style="color: var(--earth-brown);">0.0N</div>
+        </div>
+        <div class="stat-kpi-card">
+          <div class="stat-kpi-label">Hazard Events</div>
+          <div id="kpiHazardCount" class="stat-kpi-val" style="color: var(--hazard-red);">0</div>
+        </div>
+        <div class="stat-kpi-card">
+          <div class="stat-kpi-label">Avg Soil Sat.</div>
+          <div id="kpiAvgSoil" class="stat-kpi-val" style="color: var(--tactical-green);">0%</div>
+        </div>
+      </div>
+
+      <!-- Entire MongoDB Table -->
+      <section class="analytics-table-card">
+        <div class="table-toolbar">
+          <div>
+            <h3 style="font-size: 0.95rem; font-weight: 800; color: var(--text-black);">📦 Entire MongoDB Dataset</h3>
+            <p style="font-size: 0.72rem; color: var(--text-muted);">All telemetry payloads generated by ESP32 & stored in Atlas</p>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="analyticsSearch" class="search-input" placeholder="Filter by Node, Status..." oninput="filterAnalyticsTable()">
+            <button class="btn-ctrl" onclick="exportDataLog()">📥 Export CSV</button>
+          </div>
+        </div>
+
+        <div class="db-table-wrapper">
+          <table class="full-data-table">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Node ID</th>
+                <th>Tension (N)</th>
+                <th>Pitch / Roll</th>
+                <th>Vibration</th>
+                <th>Soil %</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="analyticsTableBody">
+              <!-- Dynamically populated from MongoDB -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- =========================================================================
+         VIEW 4: ALERTS (CREATED HAZARD INCIDENTS)
+         ========================================================================= -->
+    <div id="view-alerts" class="view-section">
+      <section class="alerts-feed-card">
+        <div class="oscilloscope-header">
+          <span class="oscilloscope-title">🚨 SAFETY & HAZARD ALERTS FEED</span>
+          <button class="btn-ctrl" onclick="fetchAlerts()">🔄 Refresh</button>
+        </div>
+
+        <p style="font-size: 0.76rem; color: var(--text-muted); margin-top: 4px;">
+          Log of all Moderate (75–150N) and Critical (>150N) threshold exceedances and seismic triggers:
+        </p>
+
+        <div class="alerts-list" id="alertsListContainer">
+          <!-- Dynamically populated from MongoDB /api/alerts -->
+        </div>
+      </section>
+    </div>
+
+    <!-- =========================================================================
+         VIEW 5: SETTINGS
+         ========================================================================= -->
+    <div id="view-settings" class="view-section">
+      <section class="settings-card">
+        <div class="oscilloscope-header">
+          <span class="oscilloscope-title">⚙️ SYSTEM CONFIGURATION</span>
+        </div>
+
+        <div class="settings-row">
+          <div>
+            <strong style="font-size: 0.85rem;">Normal Tension Threshold</strong>
+            <p style="font-size: 0.72rem; color: var(--text-muted);">Max load for nominal state</p>
+          </div>
+          <span class="pill-metric">0 – 75 N</span>
+        </div>
+
+        <div class="settings-row">
+          <div>
+            <strong style="font-size: 0.85rem;">Moderate Warning Threshold</strong>
+            <p style="font-size: 0.72rem; color: var(--text-muted);">Elevated load warning range</p>
+          </div>
+          <span class="pill-metric" style="color: var(--earth-amber);">75 – 150 N</span>
+        </div>
+
+        <div class="settings-row">
+          <div>
+            <strong style="font-size: 0.85rem;">Critical Hazard Limit</strong>
+            <p style="font-size: 0.72rem; color: var(--text-muted);">Rupture & rockfall hazard trigger</p>
+          </div>
+          <span class="pill-metric" style="color: var(--hazard-red);">&gt; 150 N</span>
+        </div>
+
+        <div class="settings-row">
+          <div>
+            <strong style="font-size: 0.85rem;">MongoDB Atlas Cluster</strong>
+            <p style="font-size: 0.72rem; color: var(--text-muted);">Database connection</p>
+          </div>
+          <span class="pill-metric" style="color: var(--tactical-green);">CONNECTED (Atlas)</span>
+        </div>
+
+        <div class="settings-row">
+          <div>
+            <strong style="font-size: 0.85rem;">Audio Siren Buzzer</strong>
+            <p style="font-size: 0.72rem; color: var(--text-muted);">Web Audio synthesizer test</p>
+          </div>
+          <button class="btn-ctrl" onclick="playBuzzer(880, 0.3)">Test Siren</button>
+        </div>
+      </section>
+    </div>
+
+  </div>
+
+  <!-- Bottom Navigation Dock (Matching Reference Image 2) -->
+  <nav class="bottom-nav-dock">
+    <div id="tab-dashboard" class="nav-dock-item active" onclick="switchTab('dashboard')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+        <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+        <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+        <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
+      </svg>
+      <span>Dashboard</span>
+    </div>
+    <div id="tab-nodes" class="nav-dock-item" onclick="switchTab('nodes')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+      </svg>
+      <span>Nodes</span>
+    </div>
+    <div id="tab-analytics" class="nav-dock-item" onclick="switchTab('analytics')">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4" y="12" width="3.5" height="9" fill="#f43f5e" rx="1"></rect>
+        <rect x="10.25" y="7" width="3.5" height="14" fill="#a855f7" rx="1"></rect>
+        <rect x="16.5" y="3" width="3.5" height="18" fill="#0284c7" rx="1"></rect>
+      </svg>
+      <span>Analytics</span>
+    </div>
+    <div id="tab-alerts" class="nav-dock-item" onclick="switchTab('alerts')">
+      <svg viewBox="0 0 24 24" fill="#f59e0b" stroke="#d97706" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+      </svg>
+      <span>Alerts</span>
+    </div>
+    <div id="tab-settings" class="nav-dock-item" onclick="switchTab('settings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+      <span>Settings</span>
+    </div>
+  </nav>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
