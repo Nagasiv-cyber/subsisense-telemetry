@@ -792,7 +792,8 @@ function updateDashboardView(item, history) {
   const tension = getCleanLoadValue(item);
   const pitch = Number(item.tiltX ?? 0);
   const roll = Number(item.tiltY ?? 0);
-  const isVibrating = item.vibration === true || (item.vibrationCount != null && item.vibrationCount > 0);
+  const isVibrating = Boolean(item.vibration === true || (item.vibrationCount != null && Number(item.vibrationCount) > 0) || (item.vibrationLevel != null && Number(item.vibrationLevel) > 0));
+  isPhysicalVibrationActive = isVibrating;
   const soil = Math.round(Number(item.soilMoisture ?? item.soil ?? 14.8));
 
   // 1. Tension Readout & ASTM bar
@@ -1244,6 +1245,8 @@ function exportDataLog() {
   window.location.href = '/api/readings?limit=500';
 }
 
+let isPhysicalVibrationActive = false;
+
 // Boot loop
 document.addEventListener('DOMContentLoaded', () => {
   initOscilloscope();
@@ -1255,7 +1258,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function animLoop() {
     if (currentActiveTab === 'dashboard') {
-      drawSeismicWaveform(sirenActive);
+      drawSeismicWaveform(isPhysicalVibrationActive);
     }
     requestAnimationFrame(animLoop);
   }
@@ -1268,7 +1271,7 @@ document.addEventListener('DOMContentLoaded', () => {
         drawTensionSparkline(historicalReadings.map(r => Number(r.tension || 0)));
       }
     } else if (currentActiveTab === 'nodes') {
-      drawSpatialMineSimulation();
+      if (typeof drawMineMap === 'function') drawMineMap();
     }
   });
 
