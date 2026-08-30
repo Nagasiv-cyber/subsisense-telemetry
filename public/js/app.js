@@ -160,8 +160,11 @@ function drawVectorGrid(pitch = 2.4, roll = -1.1) {
   ctx.stroke();
 }
 
-// 2. Seismic Waveform Canvas Renderer
-function drawSeismicWaveform(isVibrating = false) {
+let currentVibPulses = 0;
+let vibDecayTimer = 0;
+
+// 2. Seismic Waveform Canvas Renderer (Proportional to Physical Vibration Data)
+function drawSeismicWaveform(isVibrating = false, pulses = 0) {
   const canvas = document.getElementById('canvasSeismic');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
@@ -185,39 +188,71 @@ function drawSeismicWaveform(isVibrating = false) {
   ctx.lineTo(w, cy);
   ctx.stroke();
 
-  if (!isVibrating) {
-    // RESTING / STABLE FLATLINE (Zero Activity)
-    ctx.strokeStyle = '#15803d'; // Tactical Calm Green
-    ctx.lineWidth = 1.5;
+  // If no vibration detected and decay expired -> Flatline at rest
+  if (!isVibrating && currentVibPulses <= 0) {
+    ctx.strokeStyle = '#16a34a'; // Clean Resting Green
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(0, cy);
     ctx.lineTo(w, cy);
     ctx.stroke();
 
-    // Resting micro-glow
-    ctx.fillStyle = 'rgba(21, 128, 61, 0.08)';
-    ctx.fillRect(0, cy - 2, w, 4);
+    // Subtle center resting dot
+    ctx.fillStyle = '#16a34a';
+    ctx.beginPath();
+    ctx.arc(w / 2, cy, 2.5, 0, Math.PI * 2);
+    ctx.fill();
     return;
   }
 
-  // ACTIVE SEISMIC VIBRATION DETECTED (High-frequency spikes)
-  ctx.strokeStyle = '#dc2626'; // Hazard Red
-  ctx.lineWidth = 2.5;
+  // Calculate Proportional Amplitude & Color based on real pulse count
+  const effectivePulses = Math.max(pulses, currentVibPulses, 1);
+  let strokeColor = '#0284c7'; // Low (Blue)
+  let baseAmp = 8;
+  let freqSpeed = 0.15;
+  let noiseLevel = 4;
+
+  if (effectivePulses >= 8) {
+    strokeColor = '#dc2626'; // High / Critical (Red)
+    baseAmp = 28;
+    freqSpeed = 0.38;
+    noiseLevel = 14;
+  } else if (effectivePulses >= 3) {
+    strokeColor = '#d97706'; // Moderate (Amber)
+    baseAmp = 16;
+    freqSpeed = 0.25;
+    noiseLevel = 8;
+  } else {
+    strokeColor = '#0284c7'; // Minor / Low (Blue)
+    baseAmp = 10;
+    freqSpeed = 0.18;
+    noiseLevel = 5;
+  }
+
+  // Active Seismic Waveform
+  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth = effectivePulses >= 8 ? 2.5 : 2;
   ctx.beginPath();
 
-  seismicPhase += 0.35;
-  const baseAmp = 26;
+  seismicPhase += freqSpeed;
 
   for (let x = 0; x < w; x++) {
-    const freq1 = Math.sin(x * 0.12 + seismicPhase);
-    const freq2 = Math.sin(x * 0.28 - seismicPhase * 2.2);
-    const noise = (Math.random() - 0.5) * 14;
+    const freq1 = Math.sin(x * 0.10 + seismicPhase);
+    const freq2 = Math.sin(x * 0.24 - seismicPhase * 1.8);
+    const noise = (Math.random() - 0.5) * noiseLevel;
     const y = cy + (freq1 * freq2 * baseAmp) + noise;
 
     if (x === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   }
   ctx.stroke();
+
+  // Glow fill under active shockwave
+  ctx.lineTo(w, cy);
+  ctx.lineTo(0, cy);
+  ctx.closePath();
+  ctx.fillStyle = effectivePulses >= 8 ? 'rgba(220, 38, 38, 0.08)' : (effectivePulses >= 3 ? 'rgba(217, 119, 6, 0.06)' : 'rgba(2, 132, 199, 0.05)');
+  ctx.fill();
 }
 
 // 3. Tension Sparkline Canvas Renderer
@@ -831,8 +866,20 @@ function updateDashboardView(item, history) {
 
   // 4. Seismic Waveform & Trigger
   const activePulses = item.vibrationCount != null ? Number(item.vibrationCount) : (isVibrating ? 1 : 0);
-  document.getElementById('valTriggerCount').textContent = activePulses > 0 ? `${activePulses} Pulses (Tremor Active)` : '0 (Calm / At Rest)';
-  drawSeismicWaveform(isVibrating);
+  currentVibPulses = activePulses;
+  
+  const triggerEl = document.getElementById('valTriggerCount');
+  if (triggerEl) {
+    if (activePulses > 0) {
+      const label = activePulses >= 8 ? '🚨 HIGH SEISMIC SHOCK' : (activePulses >= 3 ? '⚠️ Moderate Tremor' : 'Minor Vibration');
+      triggerEl.textContent = `${activePulses} Pulses (${label})`;
+      triggerEl.style.color = activePulses >= 8 ? 'var(--hazard-red)' : (activePulses >= 3 ? 'var(--earth-amber)' : 'var(--tactical-blue)');
+    } else {
+      triggerEl.textContent = '0 (Calm / At Rest)';
+      triggerEl.style.color = 'var(--text-muted)';
+    }
+  }
+  drawSeismicWaveform(isVibrating, activePulses);
 
   // 5. Soil Saturation
   document.getElementById('readoutSoil').textContent = `${soil}%`;
