@@ -972,7 +972,7 @@ async function fetchAnalyticsData() {
 
     allDatabaseReadings.forEach(r => {
       const t = getCleanLoadValue(r);
-      if (t > peakTension) peakTension = t;
+      if (t < 50000 && t > peakTension) peakTension = t;
       if (t > 150 || r.alertStatus === 'CRITICAL') hazardCount++;
       totalSoil += Number(r.soilMoisture || 15);
     });
