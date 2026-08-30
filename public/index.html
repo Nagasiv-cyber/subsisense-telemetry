@@ -167,6 +167,14 @@
           <button class="btn-sim" style="flex: 1; background: #fee2e2; color: #dc2626; border-color: #fca5a5; font-weight: 700;" onclick="sendServoCommand(180)">180° Emergency Wall</button>
         </div>
 
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 10px; flex-wrap: wrap; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 6px; font-size: 0.74rem; color: var(--text-black);">
+            <input type="checkbox" id="chkAutoRetract" style="accent-color: #15803d; cursor: pointer;">
+            <label for="chkAutoRetract" style="cursor: pointer; font-weight: 600;">⏱️ Auto-return to 0° after 4s (Pulse Mode)</label>
+          </div>
+          <button class="btn-sim" style="font-size: 0.7rem; padding: 3px 10px; background: #e0f2fe; color: #0369a1; border-color: #bae6fd; font-weight: 700;" onclick="pulseServoAction(90, 4000)">🔄 Pulse 90° & Return</button>
+        </div>
+
         <div style="display: flex; align-items: center; gap: 12px; margin-top: 10px;">
           <input type="range" id="servoSlider" min="0" max="180" value="0" style="flex: 1; accent-color: #15803d; cursor: pointer;" oninput="document.getElementById('sliderAngleVal').textContent = this.value + '°'">
           <span id="sliderAngleVal" style="font-family: 'JetBrains Mono', monospace; font-weight: 800; font-size: 0.85rem; min-width: 40px;">0°</span>

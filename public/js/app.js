@@ -1118,15 +1118,24 @@ async function fetchAlerts() {
   }
 }
 
+let servoAutoRetractTimer = null;
+
 // Servo Motor Command Dispatcher
-async function sendServoCommand(angle) {
+async function sendServoCommand(angle, isAutoPulse = false) {
   const parsed = Math.min(180, Math.max(0, parseInt(angle) || 0));
   const badge = document.getElementById('servoStatusBadge');
   const slider = document.getElementById('servoSlider');
   const sliderVal = document.getElementById('sliderAngleVal');
+  const autoRetractCheck = document.getElementById('chkAutoRetract');
 
   if (slider) slider.value = parsed;
   if (sliderVal) sliderVal.textContent = parsed + '°';
+
+  // Clear any existing timer
+  if (servoAutoRetractTimer) {
+    clearTimeout(servoAutoRetractTimer);
+    servoAutoRetractTimer = null;
+  }
 
   if (badge) {
     badge.textContent = `SENDING (${parsed}°)...`;
@@ -1147,10 +1156,22 @@ async function sendServoCommand(angle) {
       badge.textContent = parsed === 0 ? 'STANDBY (0°)' : (parsed === 90 ? 'BARRIER LOCKED (90°)' : `DEPLOYED (${parsed}°)`);
       badge.style.color = parsed >= 90 ? 'var(--hazard-red)' : (parsed > 0 ? 'var(--earth-amber)' : 'var(--tactical-green)');
     }
+
+    // Auto-retract back to 0° after 4 seconds if enabled or triggered
+    if (parsed > 0 && (autoRetractCheck?.checked || isAutoPulse)) {
+      if (badge) badge.textContent += ' ⏱️ (Auto-reset in 4s)';
+      servoAutoRetractTimer = setTimeout(() => {
+        sendServoCommand(0, false);
+      }, 4000);
+    }
   } catch (err) {
     console.error('Servo command error', err);
     if (badge) badge.textContent = 'ERROR';
   }
+}
+
+async function pulseServoAction(angle = 90) {
+  await sendServoCommand(angle, true);
 }
 
 // User Actions
