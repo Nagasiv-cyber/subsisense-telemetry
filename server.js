@@ -178,11 +178,24 @@ app.get('/api/readings', async (req, res) => {
     }
 
     const collection = db.collection('readings');
-    const readings = await collection
+    let readings = await collection
       .find(query)
       .sort({ receivedAt: -1 })
       .limit(limit)
       .toArray();
+
+    // Ensure all returned readings have proper decimal numbers for tension & loadDifference
+    readings = readings.map(r => {
+      let cleanTension = Number(r.tension || 0);
+      if (cleanTension > 0 && !/^[01]{6,}$/.test(String(cleanTension))) {
+        r.loadDifference = cleanTension;
+      } else if (r.loadDifference != null && /^[01]{6,}$/.test(String(r.loadDifference))) {
+        const decoded = parseInt(String(r.loadDifference), 2);
+        r.loadDifference = decoded;
+        r.tension = decoded;
+      }
+      return r;
+    });
 
     return res.json({
       success: true,

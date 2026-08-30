@@ -939,6 +939,21 @@ async function fetchNodes() {
   }
 }
 
+function getCleanLoadValue(row) {
+  if (!row) return 0;
+  let val = row.tension;
+  if (val != null && !/^[01]{6,}$/.test(String(val))) {
+    return Number(val);
+  }
+  val = row.loadDifference ?? row.displacement ?? 0;
+  const str = String(val).trim();
+  if (/^[01]{6,}$/.test(str)) {
+    const parsed = parseInt(str, 2);
+    if (!isNaN(parsed)) return parsed;
+  }
+  return Number(val) || 0;
+}
+
 // =========================================================================
 // FETCH ANALYTICS (ENTIRE MONGODB DATABASE)
 // =========================================================================
@@ -956,7 +971,7 @@ async function fetchAnalyticsData() {
     let totalSoil = 0;
 
     allDatabaseReadings.forEach(r => {
-      const t = Number(r.tension || r.displacement || 0);
+      const t = getCleanLoadValue(r);
       if (t > peakTension) peakTension = t;
       if (t > 150 || r.alertStatus === 'CRITICAL') hazardCount++;
       totalSoil += Number(r.soilMoisture || 15);
@@ -982,8 +997,9 @@ function renderAnalyticsTable(readings) {
 
   readings.forEach(row => {
     const tr = document.createElement('tr');
-    const load = Number(row.loadDifference ?? row.tension ?? row.displacement ?? 0).toFixed(1);
-    const status = row.alertStatus || (load > 150 ? 'CRITICAL' : load >= 75 ? 'MODERATE' : 'NORMAL');
+    const loadNum = getCleanLoadValue(row);
+    const loadDisplay = loadNum.toFixed(1);
+    const status = row.alertStatus || (loadNum > 150 ? 'CRITICAL' : loadNum >= 75 ? 'MODERATE' : 'NORMAL');
     const time = new Date(row.receivedAt).toLocaleTimeString();
     const date = new Date(row.receivedAt).toLocaleDateString();
     
@@ -1021,7 +1037,7 @@ function renderAnalyticsTable(readings) {
     tr.innerHTML = `
       <td style="color: var(--text-muted); white-space: nowrap;">${date} ${time}</td>
       <td><strong>${row.nodeId || 'NodeB'}</strong></td>
-      <td><strong>${load} N</strong></td>
+      <td><strong>${loadDisplay} N</strong></td>
       <td style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #475569;">${adcDisplay}</td>
       <td>${pitch}° / ${roll}°</td>
       <td style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #64748b;">${accelDisplay}</td>
