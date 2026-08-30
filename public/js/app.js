@@ -782,17 +782,19 @@ function updateDashboardView(item, history) {
   // 1. Tension Readout & ASTM bar
   document.getElementById('readoutTension').textContent = `${tension.toFixed(1)}N`;
   
-  const percent = Math.min(Math.max((tension / 200) * 100, 2), 98);
+  const percent = tension > 500 ? Math.min(Math.max((tension / 10000) * 100, 5), 95) : Math.min(Math.max((tension / 150) * 100, 5), 95);
   document.getElementById('astmCursor').style.left = `${percent}%`;
 
   const statusLabel = document.getElementById('astmStatusLabel');
-  if (tension > 150 || item.alertStatus === 'CRITICAL') {
-    statusLabel.textContent = 'Critical Hazard: Limit Exceeded';
+  const maxLvl = Math.max(Number(item.loadLevel || 0), Number(item.movementLevel || 0), Number(item.vibrationLevel || 0));
+  
+  if (item.alertStatus === 'CRITICAL' || maxLvl === 2) {
+    statusLabel.textContent = 'Critical Hazard: High Shift Detected';
     statusLabel.style.color = 'var(--hazard-red)';
     sirenActive = true;
     playBuzzer(920, 0.2);
-  } else if (tension >= 75 || item.alertStatus === 'MODERATE') {
-    statusLabel.textContent = 'Warning: Approaching Critical';
+  } else if (item.alertStatus === 'MODERATE' || maxLvl === 1) {
+    statusLabel.textContent = 'Warning: Moderate Movement';
     statusLabel.style.color = 'var(--earth-amber)';
     sirenActive = false;
   } else {
@@ -999,7 +1001,18 @@ function renderAnalyticsTable(readings) {
     const tr = document.createElement('tr');
     const loadNum = getCleanLoadValue(row);
     const loadDisplay = loadNum.toFixed(1);
-    const status = row.alertStatus || (loadNum > 150 ? 'CRITICAL' : loadNum >= 75 ? 'MODERATE' : 'NORMAL');
+    
+    // Status respects hardware levels from ESP32 first
+    let status = row.alertStatus;
+    if (!status || status === 'CRITICAL') {
+      if (row.loadLevel != null || row.movementLevel != null || row.vibrationLevel != null) {
+        const maxLevel = Math.max(Number(row.loadLevel || 0), Number(row.movementLevel || 0), Number(row.vibrationLevel || 0));
+        status = maxLevel === 2 ? 'CRITICAL' : (maxLevel === 1 ? 'MODERATE' : 'NORMAL');
+      } else {
+        status = row.alertStatus || 'NORMAL';
+      }
+    }
+
     const time = new Date(row.receivedAt).toLocaleTimeString();
     const date = new Date(row.receivedAt).toLocaleDateString();
     

@@ -64,12 +64,23 @@ const nodeCommands = {
   NodeC: { targetServoAngle: 0, buzzer: false, lastCommandAt: new Date() },
 };
 
-// Helper function to calculate alert status based on user thresholds
-function calculateStatus(tensionValue) {
-  const val = Number(tensionValue) || 0;
-  if (val > 150) {
+// Helper function to calculate alert status based on multi-sensor levels and thresholds
+function calculateStatus(payload, tensionVal) {
+  // If ESP32 explicitly provides hardware status levels (loadLevel, vibrationLevel, movementLevel, temperatureLevel)
+  const lLevel = Number(payload.loadLevel ?? 0);
+  const vLevel = Number(payload.vibrationLevel ?? 0);
+  const mLevel = Number(payload.movementLevel ?? 0);
+  const tLevel = Number(payload.temperatureLevel ?? 0);
+
+  const maxHardwareLevel = Math.max(lLevel, vLevel, mLevel, tLevel);
+  if (maxHardwareLevel === 2) return 'CRITICAL';
+  if (maxHardwareLevel === 1) return 'MODERATE';
+
+  const val = Number(tensionVal) || 0;
+  // If tension is scaled in Newtons (0-200N) or raw ADC difference (>1000)
+  if (val > 10000 || (val > 150 && val < 500)) {
     return 'CRITICAL';
-  } else if (val >= 75) {
+  } else if (val > 4000 || (val >= 75 && val <= 150)) {
     return 'MODERATE';
   }
   return 'NORMAL';
@@ -102,11 +113,8 @@ app.post('/api/readings', async (req, res) => {
       0
     );
 
-    // Determine alert status based on rules:
-    // 0 - 75: NORMAL
-    // 75 - 150: MODERATE (Yellow)
-    // 150+: CRITICAL (Red)
-    const alertStatus = payload.alertStatus || calculateStatus(tensionVal);
+    // Determine alert status based on multi-sensor hardware levels:
+    const alertStatus = payload.alertStatus || calculateStatus(payload, tensionVal);
 
     const rawNode = String(payload.nodeId || payload.sensorId || 'NodeB');
     const normalizedNode = rawNode.toUpperCase().replace(/[^A-Z0-9]/g, '_');
