@@ -443,8 +443,8 @@ app.post('/api/simulate', async (req, res) => {
 });
 
 // Start Server
-app.listen(PORT, async () => {
-  console.log(`🌐 Server running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', async () => {
+  console.log(`🌐 Server running on http://0.0.0.0:${PORT} (LAN: http://172.16.100.172:${PORT})`);
   await connectToDatabase();
 });
 
