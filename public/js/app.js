@@ -765,7 +765,7 @@ async function fetchTelemetry() {
     if (currentActiveTab === 'dashboard') {
       updateDashboardView(latest, historicalReadings);
     } else if (currentActiveTab === 'nodes') {
-      drawSpatialMineSimulation();
+      if (typeof drawMineMap === 'function') drawMineMap();
     }
   } catch (err) {
     console.error('Fetch error', err);
