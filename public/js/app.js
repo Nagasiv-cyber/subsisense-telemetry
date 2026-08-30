@@ -982,26 +982,52 @@ function renderAnalyticsTable(readings) {
 
   readings.forEach(row => {
     const tr = document.createElement('tr');
-    const tension = Number(row.tension ?? row.displacement ?? 0).toFixed(1);
-    const status = row.alertStatus || 'NORMAL';
+    const load = Number(row.loadDifference ?? row.tension ?? row.displacement ?? 0).toFixed(1);
+    const status = row.alertStatus || (load > 150 ? 'CRITICAL' : load >= 75 ? 'MODERATE' : 'NORMAL');
     const time = new Date(row.receivedAt).toLocaleTimeString();
     const date = new Date(row.receivedAt).toLocaleDateString();
-    const vib = row.vibration ? '🚨 YES' : 'NO';
-    const soil = row.soilMoisture != null ? `${row.soilMoisture}%` : '--';
+    
+    // Raw ADC & Zero Offset
+    const rawAdc = row.rawADC != null ? `${row.rawADC}` : '--';
+    const zeroAdc = row.zeroOffset != null ? ` (0:${row.zeroOffset})` : '';
+    const adcDisplay = `${rawAdc}${zeroAdc}`;
+
+    // Tilt (Pitch / Roll)
     const pitch = Number(row.tiltX || 0).toFixed(1);
     const roll = Number(row.tiltY || 0).toFixed(1);
+
+    // Accel 3-Axis
+    const ax = Number(row.accelX || 0).toFixed(2);
+    const ay = Number(row.accelY || 0).toFixed(2);
+    const az = Number(row.accelZ || 0.98).toFixed(2);
+    const accelDisplay = `${ax}, ${ay}, ${az}`;
+
+    // Vibration
+    let vibDisplay = 'NORMAL';
+    if (row.vibrationCount != null && row.vibrationCount > 0) {
+      vibDisplay = `🚨 ${row.vibrationCount} Pulses`;
+    } else if (row.vibration) {
+      vibDisplay = '🚨 DETECTED';
+    }
+
+    // Temperature & RSSI
+    const tempDisplay = row.temperatureC != null ? `${Number(row.temperatureC).toFixed(1)}°C` : '--';
+    const rssiDisplay = row.wifiRSSI != null ? `${row.wifiRSSI} dBm` : '--';
 
     let statusStyle = 'color: var(--tactical-green); font-weight: 700;';
     if (status === 'CRITICAL') statusStyle = 'color: var(--hazard-red); font-weight: 800;';
     else if (status === 'MODERATE') statusStyle = 'color: var(--earth-amber); font-weight: 700;';
 
     tr.innerHTML = `
-      <td style="color: var(--text-muted);">${date} ${time}</td>
-      <td><strong>${row.nodeId || 'NODE_C'}</strong></td>
-      <td><strong>${tension} N</strong></td>
+      <td style="color: var(--text-muted); white-space: nowrap;">${date} ${time}</td>
+      <td><strong>${row.nodeId || 'NodeB'}</strong></td>
+      <td><strong>${load} N</strong></td>
+      <td style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #475569;">${adcDisplay}</td>
       <td>${pitch}° / ${roll}°</td>
-      <td>${vib}</td>
-      <td>${soil}</td>
+      <td style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #64748b;">${accelDisplay}</td>
+      <td style="font-weight: 600;">${vibDisplay}</td>
+      <td style="font-weight: 600; color: #0284c7;">${tempDisplay}</td>
+      <td style="font-size: 0.72rem; color: #64748b;">${rssiDisplay}</td>
       <td style="${statusStyle}">${status}</td>
     `;
     tbody.appendChild(tr);
@@ -1014,7 +1040,9 @@ function filterAnalyticsTable() {
     return (
       (r.nodeId && r.nodeId.toLowerCase().includes(query)) ||
       (r.alertStatus && r.alertStatus.toLowerCase().includes(query)) ||
-      (r.tension && String(r.tension).includes(query))
+      (r.loadDifference != null && String(r.loadDifference).includes(query)) ||
+      (r.tension != null && String(r.tension).includes(query)) ||
+      (r.rawADC != null && String(r.rawADC).includes(query))
     );
   });
   renderAnalyticsTable(filtered);

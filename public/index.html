@@ -18,9 +18,10 @@
         <h1>MinePulse Telemetry OS</h1>
         <div class="node-meta">
           <select id="nodeSelector" class="node-switcher-select" onchange="changeActiveNode(this.value)">
-            <option value="NODE_C" selected>NODE_C - Section 04 (-120m)</option>
-            <option value="NODE_B">NODE_B - Section 02 (-45m)</option>
-            <option value="NODE_A">NODE_A - Section 01 (0m)</option>
+            <option value="ALL">ALL NODES (Live Stream)</option>
+            <option value="NodeB" selected>NodeB - Borehole Load Cell (-45m)</option>
+            <option value="NodeC">NodeC - Active Gallery Roof (-120m)</option>
+            <option value="NodeA">NodeA - Surface Anchor (0m)</option>
           </select>
           <span>•</span>
           <span id="headerRssiTag">RSSI: -64dBm • 10 SPS</span>
@@ -294,10 +295,13 @@
               <tr>
                 <th>Timestamp</th>
                 <th>Node ID</th>
-                <th>Tension (N)</th>
-                <th>Pitch / Roll</th>
+                <th>Load Diff (N)</th>
+                <th>Raw ADC / Zero</th>
+                <th>Tilt (Pitch / Roll)</th>
+                <th>Accel (X/Y/Z)</th>
                 <th>Vibration</th>
-                <th>Soil %</th>
+                <th>Temp (°C)</th>
+                <th>Wi-Fi RSSI</th>
                 <th>Status</th>
               </tr>
             </thead>

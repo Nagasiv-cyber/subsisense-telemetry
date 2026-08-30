@@ -80,29 +80,55 @@ app.post('/api/readings', async (req, res) => {
 
     const payload = req.body || {};
     
-    // Support common sensor naming aliases for tension/displacement
+    // Support all ESP32 sensor naming keys (loadDifference, tension, difference, rawChange, etc.)
     const tensionVal = Number(
+      payload.loadDifference ??
+      payload.difference ??
       payload.tension ?? 
       payload.displacement ?? 
       payload.subsidence ?? 
-      payload.distance ?? 
-      payload.depth ?? 
+      payload.rawChange ??
       payload.value ?? 
       0
     );
 
-    // Determine alert status based on user rules:
+    // Determine alert status based on rules:
     // 0 - 75: NORMAL
     // 75 - 150: MODERATE (Yellow)
     // 150+: CRITICAL (Red)
-    const alertStatus = calculateStatus(tensionVal);
+    const alertStatus = payload.alertStatus || calculateStatus(tensionVal);
 
-    // Dynamic document: preserves ALL incoming sensor keys while adding metadata
+    const rawNode = String(payload.nodeId || payload.sensorId || 'NodeB');
+    const normalizedNode = rawNode.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+
+    // Dynamic document: preserves ALL incoming sensor keys from Arduino IDE while adding metadata
     const readingDocument = {
-      nodeId: String(payload.nodeId || payload.sensorId || 'NODE_C'),
-      sensorId: String(payload.sensorId || payload.nodeId || 'NODE_C'),
+      nodeId: rawNode,
+      normalizedNodeId: normalizedNode,
+      sensorId: rawNode,
       tension: tensionVal,
       displacement: tensionVal,
+      loadDifference: payload.loadDifference ?? tensionVal,
+      rawADC: payload.rawADC ?? null,
+      rawChange: payload.rawChange ?? null,
+      zeroOffset: payload.zeroOffset ?? payload.zeroADC ?? null,
+      loadLevel: payload.loadLevel ?? (alertStatus === 'CRITICAL' ? 2 : alertStatus === 'MODERATE' ? 1 : 0),
+      vibrationCount: payload.vibrationCount ?? payload.pulses ?? 0,
+      vibrationLevel: payload.vibrationLevel ?? (payload.vibration ? 1 : 0),
+      vibration: Boolean(payload.vibration || (payload.vibrationCount > 0) || (payload.vibrationLevel > 0)),
+      accelX: Number(payload.accelX ?? 0),
+      accelY: Number(payload.accelY ?? 0),
+      accelZ: Number(payload.accelZ ?? 0.98),
+      gyroX: Number(payload.gyroX ?? 0),
+      gyroY: Number(payload.gyroY ?? 0),
+      gyroZ: Number(payload.gyroZ ?? 0),
+      tiltX: Number(payload.tiltX ?? 0),
+      tiltY: Number(payload.tiltY ?? 0),
+      temperatureC: payload.temperatureC ?? null,
+      temperatureF: payload.temperatureF ?? null,
+      soilMoisture: payload.soilMoisture ?? payload.soil ?? 15,
+      wifiRSSI: payload.wifiRSSI ?? -55,
+      uptime: payload.uptime ?? null,
       ...payload,
       alertStatus,
       receivedAt: new Date(),
@@ -111,13 +137,14 @@ app.post('/api/readings', async (req, res) => {
     const collection = db.collection('readings');
     const result = await collection.insertOne(readingDocument);
 
-    console.log(`📥 [${readingDocument.receivedAt.toLocaleTimeString()}] Reading Saved (${readingDocument.nodeId}): Tension=${tensionVal} N [${alertStatus}]`);
+    console.log(`📥 [${readingDocument.receivedAt.toLocaleTimeString()}] ESP32 Payload Saved (${readingDocument.nodeId}): Load=${tensionVal} N, ADC=${readingDocument.rawADC}, Temp=${readingDocument.temperatureC}°C, Vib=${readingDocument.vibrationCount} [${alertStatus}]`);
 
     return res.status(201).json({
       success: true,
-      message: 'Reading recorded successfully',
+      message: 'Reading recorded and synced to MongoDB Atlas successfully',
       insertedId: result.insertedId,
       alertStatus,
+      nodeId: rawNode,
     });
   } catch (error) {
     console.error('Error saving reading:', error);
@@ -131,9 +158,21 @@ app.get('/api/readings', async (req, res) => {
     if (!db) {
       return res.status(503).json({ error: 'Database not connected.' });
     }
-    const limit = parseInt(req.query.limit) || 60;
+    const limit = parseInt(req.query.limit) || 100;
     const nodeId = req.query.nodeId || req.query.sensorId;
-    const query = nodeId ? { $or: [{ nodeId }, { sensorId: nodeId }] } : {};
+    
+    let query = {};
+    if (nodeId && nodeId !== 'ALL') {
+      const cleanNode = nodeId.replace(/[^a-zA-Z0-9]/g, '');
+      const regex = new RegExp(cleanNode, 'i');
+      query = {
+        $or: [
+          { nodeId: regex },
+          { sensorId: regex },
+          { normalizedNodeId: regex }
+        ]
+      };
+    }
 
     const collection = db.collection('readings');
     const readings = await collection
@@ -142,9 +181,14 @@ app.get('/api/readings', async (req, res) => {
       .limit(limit)
       .toArray();
 
-    res.json({ success: true, count: readings.length, readings });
+    return res.json({
+      success: true,
+      count: readings.length,
+      readings,
+    });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    console.error('Error fetching readings:', error);
+    return res.status(500).json({ error: error.message });
   }
 });
 
