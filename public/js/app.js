@@ -167,8 +167,8 @@ function drawSeismicWaveform(isVibrating = false) {
   const ctx = canvas.getContext('2d');
 
   const rect = canvas.getBoundingClientRect();
-  canvas.width = rect.width * window.devicePixelRatio || 240;
-  canvas.height = rect.height * window.devicePixelRatio || 80;
+  canvas.width = rect.width * (window.devicePixelRatio || 1) || 240;
+  canvas.height = rect.height * (window.devicePixelRatio || 1) || 80;
   ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
 
   const w = rect.width;
@@ -177,25 +177,41 @@ function drawSeismicWaveform(isVibrating = false) {
 
   ctx.clearRect(0, 0, w, h);
 
-  // Guideline
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
+  // Center Zero Reference Grid Line
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.06)';
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(0, cy);
   ctx.lineTo(w, cy);
   ctx.stroke();
 
-  ctx.strokeStyle = isVibrating ? '#dc2626' : '#b45309';
-  ctx.lineWidth = 2;
+  if (!isVibrating) {
+    // RESTING / STABLE FLATLINE (Zero Activity)
+    ctx.strokeStyle = '#15803d'; // Tactical Calm Green
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, cy);
+    ctx.lineTo(w, cy);
+    ctx.stroke();
+
+    // Resting micro-glow
+    ctx.fillStyle = 'rgba(21, 128, 61, 0.08)';
+    ctx.fillRect(0, cy - 2, w, 4);
+    return;
+  }
+
+  // ACTIVE SEISMIC VIBRATION DETECTED (High-frequency spikes)
+  ctx.strokeStyle = '#dc2626'; // Hazard Red
+  ctx.lineWidth = 2.5;
   ctx.beginPath();
 
-  seismicPhase += 0.15;
-  const baseAmp = isVibrating ? 24 : 6;
+  seismicPhase += 0.35;
+  const baseAmp = 26;
 
   for (let x = 0; x < w; x++) {
-    const freq1 = Math.sin(x * 0.08 + seismicPhase);
-    const freq2 = Math.sin(x * 0.18 - seismicPhase * 1.5);
-    const noise = (Math.random() - 0.5) * (isVibrating ? 12 : 2);
+    const freq1 = Math.sin(x * 0.12 + seismicPhase);
+    const freq2 = Math.sin(x * 0.28 - seismicPhase * 2.2);
+    const noise = (Math.random() - 0.5) * 14;
     const y = cy + (freq1 * freq2 * baseAmp) + noise;
 
     if (x === 0) ctx.moveTo(x, y);
@@ -813,8 +829,8 @@ function updateDashboardView(item, history) {
   drawVectorGrid(pitch, roll);
 
   // 4. Seismic Waveform & Trigger
-  if (isVibrating) triggerCount += Math.floor(Math.random() * 5 + 8);
-  document.getElementById('valTriggerCount').textContent = triggerCount;
+  const activePulses = item.vibrationCount != null ? Number(item.vibrationCount) : (isVibrating ? 1 : 0);
+  document.getElementById('valTriggerCount').textContent = activePulses > 0 ? `${activePulses} Pulses (Tremor Active)` : '0 (Calm / At Rest)';
   drawSeismicWaveform(isVibrating);
 
   // 5. Soil Saturation
