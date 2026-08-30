@@ -57,6 +57,13 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Active node commands (Servo Motor angle & actuators)
+const nodeCommands = {
+  NodeA: { targetServoAngle: 0, buzzer: false, lastCommandAt: new Date() },
+  NodeB: { targetServoAngle: 0, buzzer: false, lastCommandAt: new Date() },
+  NodeC: { targetServoAngle: 0, buzzer: false, lastCommandAt: new Date() },
+};
+
 // Helper function to calculate alert status based on user thresholds
 function calculateStatus(tensionValue) {
   const val = Number(tensionValue) || 0;
@@ -140,7 +147,11 @@ app.post('/api/readings', async (req, res) => {
     const collection = db.collection('readings');
     const result = await collection.insertOne(readingDocument);
 
-    console.log(`📥 [${readingDocument.receivedAt.toLocaleTimeString()}] ESP32 Payload Saved (${readingDocument.nodeId}): Load=${tensionVal} N, ADC=${readingDocument.rawADC}, Temp=${readingDocument.temperatureC}°C, Vib=${readingDocument.vibrationCount} [${alertStatus}]`);
+    // Look up any pending servo actuator command for this node
+    const nodeKey = rawNode.toUpperCase().includes('B') ? 'NodeB' : (rawNode.toUpperCase().includes('A') ? 'NodeA' : 'NodeC');
+    const activeCommand = nodeCommands[nodeKey] || nodeCommands['NodeB'];
+
+    console.log(`📥 [${readingDocument.receivedAt.toLocaleTimeString()}] ESP32 Payload Saved (${readingDocument.nodeId}): Load=${tensionVal} N, ADC=${readingDocument.rawADC}, Temp=${readingDocument.temperatureC}°C, Vib=${readingDocument.vibrationCount} [${alertStatus}] -> Resp Servo: ${activeCommand.targetServoAngle}°`);
 
     return res.status(201).json({
       success: true,
@@ -148,11 +159,46 @@ app.post('/api/readings', async (req, res) => {
       insertedId: result.insertedId,
       alertStatus,
       nodeId: rawNode,
+      targetServoAngle: activeCommand.targetServoAngle,
+      servoAction: activeCommand.targetServoAngle > 0 ? 'DEPLOYED' : 'RETRACTED',
+      command: activeCommand,
     });
   } catch (error) {
     console.error('Error saving reading:', error);
     return res.status(500).json({ success: false, error: error.message });
   }
+});
+
+// POST /api/command/servo - Set target servo angle from the Web App
+app.post('/api/command/servo', (req, res) => {
+  const { nodeId = 'NodeB', angle = 90 } = req.body;
+  const parsedAngle = Math.min(180, Math.max(0, parseInt(angle) || 0));
+  
+  const key = String(nodeId).toUpperCase().includes('B') ? 'NodeB' : (String(nodeId).toUpperCase().includes('A') ? 'NodeA' : 'NodeC');
+  nodeCommands[key] = {
+    targetServoAngle: parsedAngle,
+    lastCommandAt: new Date(),
+    action: parsedAngle === 0 ? 'RETRACTED' : (parsedAngle === 90 ? 'LOCK' : 'CUSTOM')
+  };
+
+  console.log(`🎮 [Web App Command] ${key} -> Target Servo Angle: ${parsedAngle}°`);
+
+  return res.json({
+    success: true,
+    nodeId: key,
+    targetServoAngle: parsedAngle,
+    message: `Servo command for ${key} queued to ${parsedAngle}°`
+  });
+});
+
+// GET /api/command/servo/:nodeId - Query active servo command
+app.get('/api/command/servo/:nodeId', (req, res) => {
+  const key = String(req.params.nodeId).toUpperCase().includes('B') ? 'NodeB' : (String(req.params.nodeId).toUpperCase().includes('A') ? 'NodeA' : 'NodeC');
+  return res.json({
+    success: true,
+    nodeId: key,
+    command: nodeCommands[key] || { targetServoAngle: 0 }
+  });
 });
 
 // GET /api/readings - Fetch historical readings

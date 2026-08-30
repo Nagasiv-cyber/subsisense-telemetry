@@ -1118,6 +1118,41 @@ async function fetchAlerts() {
   }
 }
 
+// Servo Motor Command Dispatcher
+async function sendServoCommand(angle) {
+  const parsed = Math.min(180, Math.max(0, parseInt(angle) || 0));
+  const badge = document.getElementById('servoStatusBadge');
+  const slider = document.getElementById('servoSlider');
+  const sliderVal = document.getElementById('sliderAngleVal');
+
+  if (slider) slider.value = parsed;
+  if (sliderVal) sliderVal.textContent = parsed + '°';
+
+  if (badge) {
+    badge.textContent = `SENDING (${parsed}°)...`;
+    badge.style.color = '#0284c7';
+  }
+
+  try {
+    const res = await fetch('/api/command/servo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nodeId: activeNodeFilter || 'NodeB',
+        angle: parsed
+      })
+    });
+    const data = await res.json();
+    if (badge) {
+      badge.textContent = parsed === 0 ? 'STANDBY (0°)' : (parsed === 90 ? 'BARRIER LOCKED (90°)' : `DEPLOYED (${parsed}°)`);
+      badge.style.color = parsed >= 90 ? 'var(--hazard-red)' : (parsed > 0 ? 'var(--earth-amber)' : 'var(--tactical-green)');
+    }
+  } catch (err) {
+    console.error('Servo command error', err);
+    if (badge) badge.textContent = 'ERROR';
+  }
+}
+
 // User Actions
 function toggleSiren() {
   initAudio();

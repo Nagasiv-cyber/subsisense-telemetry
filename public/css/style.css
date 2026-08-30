@@ -460,13 +460,25 @@ body {
   position: relative;
 }
 
-/* Kinematics Strip */
-.kinematics-card {
+/* Servo Actuator Card */
+.servo-control-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-card);
-  padding: 10px 14px;
+  padding: 14px;
   box-shadow: var(--shadow-card);
+}
+
+.servo-controls-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+@media (max-width: 600px) {
+  .servo-controls-row {
+    flex-wrap: wrap;
+  }
 }
 
 .kinematics-title {

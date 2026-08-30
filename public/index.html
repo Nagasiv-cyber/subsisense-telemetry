@@ -146,6 +146,34 @@
         </div>
       </section>
 
+      <!-- Servo Motor Actuator & Strata Barrier Remote Control -->
+      <section class="servo-control-card">
+        <div class="oscilloscope-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 1.1rem;">⚙️</span>
+            <span class="oscilloscope-title">SERVO MOTOR & STRATA BARRIER ACTUATOR</span>
+          </div>
+          <span id="servoStatusBadge" class="pill-metric" style="color: var(--tactical-green);">STANDBY (0°)</span>
+        </div>
+
+        <p style="font-size: 0.74rem; color: var(--text-muted); margin-top: 2px;">
+          Remotely trigger the physical ESP32 servo motor to deploy structural roof supports or lock emergency safety barriers:
+        </p>
+
+        <div class="servo-controls-row">
+          <button class="btn-sim" style="flex: 1;" onclick="sendServoCommand(0)">0° Retract</button>
+          <button class="btn-sim" style="flex: 1;" onclick="sendServoCommand(45)">45° Support</button>
+          <button class="btn-sim" style="flex: 1; background: #fef3c7; color: #b45309; border-color: #fcd34d; font-weight: 700;" onclick="sendServoCommand(90)">90° Lock Barrier</button>
+          <button class="btn-sim" style="flex: 1; background: #fee2e2; color: #dc2626; border-color: #fca5a5; font-weight: 700;" onclick="sendServoCommand(180)">180° Emergency Wall</button>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 12px; margin-top: 10px;">
+          <input type="range" id="servoSlider" min="0" max="180" value="0" style="flex: 1; accent-color: #15803d; cursor: pointer;" oninput="document.getElementById('sliderAngleVal').textContent = this.value + '°'">
+          <span id="sliderAngleVal" style="font-family: 'JetBrains Mono', monospace; font-weight: 800; font-size: 0.85rem; min-width: 40px;">0°</span>
+          <button class="btn-ctrl" style="background: #15803d; color: #ffffff; border-color: #15803d; font-weight: 700; padding: 6px 14px;" onclick="sendServoCommand(document.getElementById('servoSlider').value)">Send Angle</button>
+        </div>
+      </section>
+
       <!-- Real-Time Packet Stream -->
       <section class="packet-stream-card">
         <div class="packet-stream-header">
