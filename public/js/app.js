@@ -741,7 +741,7 @@ function initOscilloscope() {
   });
 }
 
-let activeNodeFilter = 'NODE_C';
+let activeNodeFilter = 'NodeB';
 
 function changeActiveNode(nodeId) {
   activeNodeFilter = nodeId;
@@ -751,7 +751,7 @@ function changeActiveNode(nodeId) {
 // 6. Fetch Telemetry Data
 async function fetchTelemetry() {
   try {
-    const url = activeNodeFilter 
+    const url = (activeNodeFilter && activeNodeFilter !== 'ALL')
       ? `/api/readings?nodeId=${activeNodeFilter}&limit=30` 
       : '/api/readings?limit=30';
     const res = await fetch(url);
@@ -773,10 +773,10 @@ async function fetchTelemetry() {
 }
 
 function updateDashboardView(item, history) {
-  const tension = Number(item.tension ?? item.displacement ?? 0);
+  const tension = getCleanLoadValue(item);
   const pitch = Number(item.tiltX ?? 0);
   const roll = Number(item.tiltY ?? 0);
-  const isVibrating = item.vibration === true || item.vibration === 'DETECTED';
+  const isVibrating = item.vibration === true || (item.vibrationCount != null && item.vibrationCount > 0);
   const soil = Math.round(Number(item.soilMoisture ?? item.soil ?? 14.8));
 
   // 1. Tension Readout & ASTM bar
@@ -786,12 +786,12 @@ function updateDashboardView(item, history) {
   document.getElementById('astmCursor').style.left = `${percent}%`;
 
   const statusLabel = document.getElementById('astmStatusLabel');
-  if (tension > 150) {
+  if (tension > 150 || item.alertStatus === 'CRITICAL') {
     statusLabel.textContent = 'Critical Hazard: Limit Exceeded';
     statusLabel.style.color = 'var(--hazard-red)';
     sirenActive = true;
     playBuzzer(920, 0.2);
-  } else if (tension >= 75) {
+  } else if (tension >= 75 || item.alertStatus === 'MODERATE') {
     statusLabel.textContent = 'Warning: Approaching Critical';
     statusLabel.style.color = 'var(--earth-amber)';
     sirenActive = false;
