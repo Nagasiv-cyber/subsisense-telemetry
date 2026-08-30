@@ -179,8 +179,11 @@ body {
 }
 
 @media (min-width: 1024px) {
+  .header-inner-container {
+    max-width: 1180px;
+  }
   .app-container {
-    max-width: 980px;
+    max-width: 1180px;
   }
 }
 
@@ -877,38 +880,69 @@ body {
 
 .db-table-wrapper {
   width: 100%;
+  max-height: 560px;
+  overflow-y: auto;
   overflow-x: auto;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
+  -webkit-overflow-scrolling: touch;
+  background: #ffffff;
+  position: relative;
+}
+
+/* Custom Sleek Scrollbars for Table */
+.db-table-wrapper::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.db-table-wrapper::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.db-table-wrapper::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.db-table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 .full-data-table {
   width: 100%;
-  border-collapse: collapse;
+  min-width: 900px;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 0.75rem;
   text-align: left;
 }
 
 .full-data-table th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   background: #f8fafc;
-  padding: 10px 12px;
+  padding: 11px 14px;
   color: var(--text-muted);
-  font-weight: 700;
+  font-weight: 800;
   text-transform: uppercase;
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.68rem;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 2px solid var(--border-color);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .full-data-table td {
-  padding: 10px 12px;
+  padding: 10px 14px;
   border-bottom: 1px solid #f1f5f9;
   white-space: nowrap;
   font-family: 'JetBrains Mono', monospace;
 }
 
 .full-data-table tr:hover td {
-  background: #f8fafc;
+  background: #f0fdf4;
 }
 
 /* =========================================================================
