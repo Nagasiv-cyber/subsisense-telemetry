@@ -80,12 +80,15 @@ app.post('/api/readings', async (req, res) => {
 
     const payload = req.body || {};
     
-    // Support all ESP32 sensor naming keys (loadDifference, tension, difference, rawChange, etc.)
+    // Auto-detect and fix Arduino C++ Base-2 Binary trap (e.g. String(longVar, 2) creates "10111000110" for 1478)
+    let rawDiff = payload.loadDifference ?? payload.difference ?? payload.tension ?? payload.displacement ?? 0;
+    if (typeof rawDiff === 'number' && String(rawDiff).length > 6 && /^[01]+$/.test(String(rawDiff))) {
+      rawDiff = parseInt(String(rawDiff), 2);
+    }
+
+    // Support all ESP32 sensor naming keys
     const tensionVal = Number(
-      payload.loadDifference ??
-      payload.difference ??
-      payload.tension ?? 
-      payload.displacement ?? 
+      rawDiff ??
       payload.subsidence ?? 
       payload.rawChange ??
       payload.value ?? 
@@ -108,7 +111,7 @@ app.post('/api/readings', async (req, res) => {
       sensorId: rawNode,
       tension: tensionVal,
       displacement: tensionVal,
-      loadDifference: payload.loadDifference ?? tensionVal,
+      loadDifference: tensionVal,
       rawADC: payload.rawADC ?? null,
       rawChange: payload.rawChange ?? null,
       zeroOffset: payload.zeroOffset ?? payload.zeroADC ?? null,
